@@ -502,6 +502,7 @@ def isPostExists(POST):
         cur.execute("select * from links where link=:link1 or link=:link2 or link=:link3",
                     {"link1": slugifyPath1, "link2": slugifyPath2, "link3": slugifyPath3})
         if cur.fetchone() is not None:
+            print("in database")
             return True
 
         if OLD_FILE_PATH.exists() or \
