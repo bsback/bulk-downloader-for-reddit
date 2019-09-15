@@ -16,6 +16,9 @@ from src.errors import (AlbumNotDownloadedCompletely, FileAlreadyExistsError,
                         NotADownloadableLinkError)
 from src.tools import GLOBAL, nameCorrector, printToFile
 
+import sqlite3
+from slugify import slugify
+
 VanillaPrint = print
 print = printToFile
 
@@ -71,7 +74,14 @@ def getFile(fileDir, tempDir, imageURL, indent=0):
     ]
 
     if not ".mp4" in imageURL and not ".webm" in imageURL:
+        print('-> not video')
         return
+
+    slugifyPath = slugify(fileDir)
+    cur = GLOBAL.conn.cursor()
+    cur.execute("INSERT INTO links VALUES (?, ?, ?, ?)",
+                (slugifyPath, '-', '-', '-'))
+    conn.commit()
 
     opener = urllib.request.build_opener()
     if not "imgur" in imageURL:
@@ -262,7 +272,7 @@ class Imgur:
             post['postExt'] = getExtension(post['mediaURL'])
 
             if post['postExt'] != '.mp4' and post['postExt'] != '.webm':
-                print('not video')
+                print('-> not video')
             else:
                 title = nameCorrector(post['postTitle'])
 
@@ -440,7 +450,7 @@ class Gfycat:
         POST['postExt'] = getExtension(POST['mediaURL'])
 
         if POST['postExt'] != '.mp4' and POST['postExt'] != '.webm':
-            print('not video')
+            print('-> not video')
         else:
             if not os.path.exists(directory):
                 os.makedirs(directory)
