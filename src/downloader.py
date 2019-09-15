@@ -77,7 +77,7 @@ def getFile(fileDir, tempDir, imageURL, indent=0):
         print('-> not video')
         return
 
-    slugifyPath = slugify(fileDir)
+    slugifyPath = slugify(str(fileDir))
     cur = GLOBAL.conn.cursor()
     cur.execute("INSERT INTO links VALUES (?, ?, ?, ?)",
                 (slugifyPath, '-', '-', '-'))
