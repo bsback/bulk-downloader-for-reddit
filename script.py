@@ -701,10 +701,10 @@ def main():
           )
 
     GLOBAL.conn = sqlite3.connect(GLOBAL.arguments.database)
-    c = GLOBAL.conn.cursor()
-    c.execute('''CREATE TABLE links
-             (link text, cat text, t1 text, t2 text)''')
-    GLOBAL.conn.commit()
+    # c = GLOBAL.conn.cursor()
+    # c.execute('''CREATE TABLE links
+    #          (link text, cat text, t1 text, t2 text)''')
+    # GLOBAL.conn.commit()
 
     try:
         checkConflicts()
