@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-This program downloads imgur, gfycat and direct image and video links of 
+This program downloads imgur, gfycat and direct image and video links of
 saved posts from a reddit account. It is written in Python 3.
 """
 
@@ -20,12 +20,15 @@ from src.parser import LinkDesigner
 from src.searcher import getPosts
 from src.tools import (GLOBAL, createLogFile, jsonFile, nameCorrector,
                        printToFile)
+import sqlite3
+from slugify import slugify
 
 __author__ = "Ali Parlakci"
 __license__ = "GPL"
 __version__ = "1.6.5"
 __maintainer__ = "Ali Parlakci"
 __email__ = "parlakciali@gmail.com"
+
 
 def getConfig(configFileName):
     """Read credentials from config.json file"""
@@ -40,65 +43,70 @@ def getConfig(configFileName):
             if content["reddit_refresh_token"] == "":
                 FILE.delete("reddit_refresh_token")
 
-        if not all(False if content.get(key,"") == "" else True for key in keys):
+        if not all(False if content.get(key, "") == "" else True for key in keys):
             print(
-                "Go to this URL and fill the form: " \
-                "https://api.imgur.com/oauth2/addclient\n" \
+                "Go to this URL and fill the form: "
+                "https://api.imgur.com/oauth2/addclient\n"
                 "Enter the client id and client secret here:"
             )
-            webbrowser.open("https://api.imgur.com/oauth2/addclient",new=2)
+            webbrowser.open("https://api.imgur.com/oauth2/addclient", new=2)
 
         for key in keys:
             try:
                 if content[key] == "":
                     raise KeyError
             except KeyError:
-                FILE.add({key:input("  "+key+": ")})
+                FILE.add({key: input("  " + key + ": ")})
         return jsonFile(configFileName).read()
 
     else:
         FILE = jsonFile(configFileName)
         configDictionary = {}
         print(
-            "Go to this URL and fill the form: " \
-            "https://api.imgur.com/oauth2/addclient\n" \
+            "Go to this URL and fill the form: "
+            "https://api.imgur.com/oauth2/addclient\n"
             "Enter the client id and client secret here:"
-            )
-        webbrowser.open("https://api.imgur.com/oauth2/addclient",new=2)
+        )
+        webbrowser.open("https://api.imgur.com/oauth2/addclient", new=2)
         for key in keys:
-            configDictionary[key] = input("  "+key+": ")
+            configDictionary[key] = input("  " + key + ": ")
         FILE.add(configDictionary)
         return FILE.read()
+
 
 def parseArguments(arguments=[]):
     """Initialize argparse and add arguments"""
 
     parser = argparse.ArgumentParser(allow_abbrev=False,
-                                     description="This program downloads " \
-                                                 "media from reddit " \
+                                     description="This program downloads "
+                                                 "media from reddit "
                                                  "posts")
-    parser.add_argument("--directory","-d",
-                        help="Specifies the directory where posts will be " \
+    parser.add_argument("--database", "-db",
+                        help="db ",
+                        metavar="DB")
+
+    parser.add_argument("--directory", "-d",
+                        help="Specifies the directory where posts will be "
                         "downloaded to",
                         metavar="DIRECTORY")
-        
+
     parser.add_argument("--NoDownload",
-                        help="Just gets the posts and stores them in a file" \
+                        help="Just gets the posts and stores them in a file"
                              " for downloading later",
                         action="store_true",
                         default=False)
-    
-    parser.add_argument("--verbose","-v",
+
+    parser.add_argument("--verbose", "-v",
                         help="Verbose Mode",
                         action="store_true",
                         default=False)
-    
-    parser.add_argument("--quit","-q",
+
+    parser.add_argument("--quit", "-q",
                         help="Auto quit afer the process finishes",
                         action="store_true",
                         default=False)
 
-    parser.add_argument("--link","-l",
+    parser.add_argument("--link", "-l",
                         help="Get posts from link",
                         metavar="link")
 
@@ -115,29 +123,29 @@ def parseArguments(arguments=[]):
                         help="Gets upvoted posts of --user")
 
     parser.add_argument("--log",
-                        help="Takes a log file which created by itself " \
-                             "(json files), reads posts and tries downloadin" \
+                        help="Takes a log file which created by itself "
+                             "(json files), reads posts and tries downloadin"
                              "g them again.",
                         # type=argparse.FileType('r'),
                         metavar="LOG FILE")
 
     parser.add_argument("--subreddit",
                         nargs="+",
-                        help="Triggers subreddit mode and takes subreddit's " \
+                        help="Triggers subreddit mode and takes subreddit's "
                              "name without r/. use \"frontpage\" for frontpage",
                         metavar="SUBREDDIT",
                         type=str)
-    
+
     parser.add_argument("--multireddit",
-                        help="Triggers multireddit mode and takes "\
+                        help="Triggers multireddit mode and takes "
                              "multireddit's name without m/",
                         metavar="MULTIREDDIT",
                         type=str)
 
     parser.add_argument("--user",
-                        help="reddit username if needed. use \"me\" for " \
+                        help="reddit username if needed. use \"me\" for "
                              "current user",
-                        required="--multireddit" in sys.argv or \
+                        required="--multireddit" in sys.argv or
                                  "--submitted" in sys.argv,
                         metavar="redditor",
                         type=str)
@@ -148,10 +156,10 @@ def parseArguments(arguments=[]):
                         type=str)
 
     parser.add_argument("--sort",
-                        help="Either hot, top, new, controversial, rising " \
+                        help="Either hot, top, new, controversial, rising "
                              "or relevance default: hot",
                         choices=[
-                            "hot","top","new","controversial","rising",
+                            "hot", "top", "new", "controversial", "rising",
                             "relevance"
                         ],
                         metavar="SORT TYPE",
@@ -163,9 +171,10 @@ def parseArguments(arguments=[]):
                         type=int)
 
     parser.add_argument("--time",
-                        help="Either hour, day, week, month, year or all." \
+                        help="Either hour, day, week, month, year or all."
                              " default: all",
-                        choices=["all","hour","day","week","month","year"],
+                        choices=["all", "hour", "day",
+                                 "week", "month", "year"],
                         metavar="TIME_LIMIT",
                         type=str)
 
@@ -173,6 +182,7 @@ def parseArguments(arguments=[]):
         return parser.parse_args()
     else:
         return parser.parse_args(arguments)
+
 
 def checkConflicts():
     """Check if command-line arguments are given correcly,
@@ -187,61 +197,62 @@ def checkConflicts():
     search = 1 if GLOBAL.arguments.search else 0
 
     modes = [
-        "saved","subreddit","submitted","log","link","upvoted","multireddit"
+        "saved", "subreddit", "submitted", "log", "link", "upvoted", "multireddit"
     ]
 
     values = {
-        x: 0 if getattr(GLOBAL.arguments,x) is None or \
-                getattr(GLOBAL.arguments,x) is False \
-             else 1 \
-             for x in modes
+        x: 0 if getattr(GLOBAL.arguments, x) is None or
+        getattr(GLOBAL.arguments, x) is False
+        else 1
+        for x in modes
     }
 
     if not sum(values[x] for x in values) == 1:
         raise ProgramModeError("Invalid program mode")
-    
-    if search+values["saved"] == 2:
+
+    if search + values["saved"] == 2:
         raise SearchModeError("You cannot search in your saved posts")
 
-    if search+values["submitted"] == 2:
+    if search + values["submitted"] == 2:
         raise SearchModeError("You cannot search in submitted posts")
 
-    if search+values["upvoted"] == 2:
+    if search + values["upvoted"] == 2:
         raise SearchModeError("You cannot search in upvoted posts")
 
-    if search+values["log"] == 2:
+    if search + values["log"] == 2:
         raise SearchModeError("You cannot search in log files")
 
-    if values["upvoted"]+values["submitted"] == 1 and user == 0:
+    if values["upvoted"] + values["submitted"] == 1 and user == 0:
         raise RedditorNameError("No redditor name given")
+
 
 class PromptUser:
     @staticmethod
     def chooseFrom(choices):
         print()
-        choicesByIndex = list(str(x) for x in range(len(choices)+1))
+        choicesByIndex = list(str(x) for x in range(len(choices) + 1))
         for i in range(len(choices)):
             print("{indent}[{order}] {mode}".format(
-                indent=" "*4,order=i+1,mode=choices[i]
+                indent=" " * 4, order=i + 1, mode=choices[i]
             ))
-        print(" "*4+"[0] exit\n")
+        print(" " * 4 + "[0] exit\n")
         choice = input("> ")
-        while not choice.lower() in choices+choicesByIndex+["exit"]:
+        while not choice.lower() in choices + choicesByIndex + ["exit"]:
             print("Invalid input\n")
             programModeIndex = input("> ")
 
         if choice == "0" or choice == "exit":
             sys.exit()
         elif choice in choicesByIndex:
-            return choices[int(choice)-1]
+            return choices[int(choice) - 1]
         else:
             return choice
-    
+
     def __init__(self):
         print("select program mode:")
         programModes = [
-            "search","subreddit","multireddit",
-            "submitted","upvoted","saved","log"
+            "search", "subreddit", "multireddit",
+            "submitted", "upvoted", "saved", "log"
         ]
         programMode = self.chooseFrom(programModes)
 
@@ -251,23 +262,23 @@ class PromptUser:
 
             print("\nselect sort type:")
             sortTypes = [
-                "relevance","top","new"
+                "relevance", "top", "new"
             ]
             sortType = self.chooseFrom(sortTypes)
             GLOBAL.arguments.sort = sortType
 
             print("\nselect time filter:")
             timeFilters = [
-                "hour","day","week","month","year","all"
+                "hour", "day", "week", "month", "year", "all"
             ]
             timeFilter = self.chooseFrom(timeFilters)
             GLOBAL.arguments.time = timeFilter
 
         if programMode == "subreddit":
 
-            subredditInput = input("(type frontpage for all subscribed subreddits,\n" \
-                                   " use plus to seperate multi subreddits:" \
-                                   " pics+funny+me_irl etc.)\n\n" \
+            subredditInput = input("(type frontpage for all subscribed subreddits,\n"
+                                   " use plus to seperate multi subreddits:"
+                                   " pics+funny+me_irl etc.)\n\n"
                                    "subreddit: ")
             GLOBAL.arguments.subreddit = subredditInput
 
@@ -276,24 +287,25 @@ class PromptUser:
             #     GLOBAL.arguments.subreddit += "+" + subredditInput
 
             if " " in GLOBAL.arguments.subreddit:
-                GLOBAL.arguments.subreddit = "+".join(GLOBAL.arguments.subreddit.split())
+                GLOBAL.arguments.subreddit = "+".join(
+                    GLOBAL.arguments.subreddit.split())
 
             # DELETE THE PLUS (+) AT THE END
             if not subredditInput.lower() == "frontpage" \
-                and GLOBAL.arguments.subreddit[-1] == "+":
+                    and GLOBAL.arguments.subreddit[-1] == "+":
                 GLOBAL.arguments.subreddit = GLOBAL.arguments.subreddit[:-1]
 
             print("\nselect sort type:")
             sortTypes = [
-                "hot","top","new","rising","controversial"
+                "hot", "top", "new", "rising", "controversial"
             ]
             sortType = self.chooseFrom(sortTypes)
             GLOBAL.arguments.sort = sortType
 
-            if sortType in ["top","controversial"]:
+            if sortType in ["top", "controversial"]:
                 print("\nselect time filter:")
                 timeFilters = [
-                    "hour","day","week","month","year","all"
+                    "hour", "day", "week", "month", "year", "all"
                 ]
                 timeFilter = self.chooseFrom(timeFilters)
                 GLOBAL.arguments.time = timeFilter
@@ -303,31 +315,31 @@ class PromptUser:
         elif programMode == "multireddit":
             GLOBAL.arguments.user = input("\nmultireddit owner: ")
             GLOBAL.arguments.multireddit = input("\nmultireddit: ")
-            
+
             print("\nselect sort type:")
             sortTypes = [
-                "hot","top","new","rising","controversial"
+                "hot", "top", "new", "rising", "controversial"
             ]
             sortType = self.chooseFrom(sortTypes)
             GLOBAL.arguments.sort = sortType
 
-            if sortType in ["top","controversial"]:
+            if sortType in ["top", "controversial"]:
                 print("\nselect time filter:")
                 timeFilters = [
-                    "hour","day","week","month","year","all"
+                    "hour", "day", "week", "month", "year", "all"
                 ]
                 timeFilter = self.chooseFrom(timeFilters)
                 GLOBAL.arguments.time = timeFilter
             else:
                 GLOBAL.arguments.time = "all"
-        
+
         elif programMode == "submitted":
             GLOBAL.arguments.submitted = True
             GLOBAL.arguments.user = input("\nredditor: ")
 
             print("\nselect sort type:")
             sortTypes = [
-                "hot","top","new","controversial"
+                "hot", "top", "new", "controversial"
             ]
             sortType = self.chooseFrom(sortTypes)
             GLOBAL.arguments.sort = sortType
@@ -335,25 +347,25 @@ class PromptUser:
             if sortType == "top":
                 print("\nselect time filter:")
                 timeFilters = [
-                    "hour","day","week","month","year","all"
+                    "hour", "day", "week", "month", "year", "all"
                 ]
                 timeFilter = self.chooseFrom(timeFilters)
                 GLOBAL.arguments.time = timeFilter
             else:
                 GLOBAL.arguments.time = "all"
-        
+
         elif programMode == "upvoted":
             GLOBAL.arguments.upvoted = True
             GLOBAL.arguments.user = input("\nredditor: ")
-        
+
         elif programMode == "saved":
             GLOBAL.arguments.saved = True
-        
+
         elif programMode == "log":
             while True:
                 GLOBAL.arguments.log = input("\nlog file directory:")
-                if Path(GLOBAL.arguments.log ).is_file():
-                    break 
+                if Path(GLOBAL.arguments.log).is_file():
+                    break
         while True:
             try:
                 GLOBAL.arguments.limit = int(input("\nlimit (0 for none): "))
@@ -362,6 +374,7 @@ class PromptUser:
                 break
             except ValueError:
                 pass
+
 
 def prepareAttributes():
     ATTRIBUTES = {}
@@ -405,7 +418,7 @@ def prepareAttributes():
             ATTRIBUTES["time"] = GLOBAL.arguments.time
 
     elif GLOBAL.arguments.subreddit is not None:
-        if type(GLOBAL.arguments.subreddit) == list:    
+        if type(GLOBAL.arguments.subreddit) == list:
             GLOBAL.arguments.subreddit = "+".join(GLOBAL.arguments.subreddit)
 
         ATTRIBUTES["subreddit"] = GLOBAL.arguments.subreddit
@@ -424,10 +437,11 @@ def prepareAttributes():
 
         if GLOBAL.arguments.sort == "rising":
             raise InvalidSortingType("Invalid sorting type has given")
-    
+
     ATTRIBUTES["limit"] = GLOBAL.arguments.limit
 
     return ATTRIBUTES
+
 
 def postFromLog(fileName):
     """Analyze a log file and return a list of dictionaries containing
@@ -452,13 +466,14 @@ def postFromLog(fileName):
 
     return posts
 
+
 def isPostExists(POST):
     """Figure out a file's name and checks if the file already exists"""
 
     title = nameCorrector(POST['postTitle'])
     PATH = GLOBAL.directory / POST["postSubreddit"]
 
-    possibleExtensions = [".jpg",".png",".mp4",".gif",".webm",".md"]
+    possibleExtensions = [".jpg", ".png", ".mp4", ".gif", ".webm", ".md"]
 
     """If you change the filenames, don't forget to add them here.
     Please don't remove existing ones
@@ -471,65 +486,75 @@ def isPostExists(POST):
             + extension
         )
         FILE_PATH = PATH / (
-            POST["postSubmitter"] 
-            + "_" + title 
-            + "_" + POST['postId'] 
+            POST["postSubmitter"]
+            + "_" + title
+            + "_" + POST['postId']
             + extension
         )
 
-        SHORT_FILE_PATH = PATH / (POST['postId']+extension)
+        SHORT_FILE_PATH = PATH / (POST['postId'] + extension)
+
+        slugifyPath1 = slugify(OLD_FILE_PATH)
+        slugifyPath2 = slugify(FILE_PATH)
+        slugifyPath3 = slugify(SHORT_FILE_PATH)
+
+        cur = GLOBAL.conn.cursor()
+        cur.execute("select * from links where link=:link1 or link=:link2 or link=:link3",
+                    {"link1": slugifyPath1, "link2": slugifyPath2, "link3": slugifyPath3})
+        if cur.fetchone() is not None:
+            return True
 
         if OLD_FILE_PATH.exists() or \
            FILE_PATH.exists() or \
            SHORT_FILE_PATH.exists():
-           
+
             return True
 
     else:
         return False
 
-def downloadPost(SUBMISSION):
 
+def downloadPost(SUBMISSION):
     """Download directory is declared here for each file"""
     directory = GLOBAL.directory / SUBMISSION['postSubreddit']
 
     global lastRequestTime
 
     downloaders = {
-        "imgur":Imgur,"gfycat":Gfycat,"erome":Erome,"direct":Direct,"self":Self
+        "imgur": Imgur, "gfycat": Gfycat, "erome": Erome, "direct": Direct, "self": Self
     }
 
     print()
     if SUBMISSION['postType'] in downloaders:
 
         if SUBMISSION['postType'] == "imgur":
-            
+
             while int(time.time() - lastRequestTime) <= 2:
                 pass
 
             credit = Imgur.get_credits()
 
-            IMGUR_RESET_TIME = credit['UserReset']-time.time()
-            USER_RESET = ("after " \
-                            + str(int(IMGUR_RESET_TIME/60)) \
-                            + " Minutes " \
-                            + str(int(IMGUR_RESET_TIME%60)) \
-                            + " Seconds") 
-            
+            IMGUR_RESET_TIME = credit['UserReset'] - time.time()
+            USER_RESET = ("after "
+                          + str(int(IMGUR_RESET_TIME / 60))
+                          + " Minutes "
+                            + str(int(IMGUR_RESET_TIME % 60))
+                            + " Seconds")
+
             if credit['ClientRemaining'] < 25 or credit['UserRemaining'] < 25:
-                printCredit = {"noPrint":False}
+                printCredit = {"noPrint": False}
             else:
-                printCredit = {"noPrint":True}
+                printCredit = {"noPrint": True}
 
             print(
                 "==> Client: {} - User: {} - Reset {}\n".format(
                     credit['ClientRemaining'],
                     credit['UserRemaining'],
                     USER_RESET
-                ),end="",**printCredit
+                ), end="", **printCredit
             )
 
-            if not (credit['UserRemaining'] == 0 or \
+            if not (credit['UserRemaining'] == 0 or
                     credit['ClientRemaining'] == 0):
 
                 """This block of code is needed
@@ -545,14 +570,16 @@ def downloadPost(SUBMISSION):
                 elif credit['ClientRemaining'] == 0:
                     KEYWORD = "client"
 
-                raise ImgurLimitError('{} LIMIT EXCEEDED\n'.format(KEYWORD.upper()))
+                raise ImgurLimitError(
+                    '{} LIMIT EXCEEDED\n'.format(KEYWORD.upper()))
 
-        downloaders[SUBMISSION['postType']] (directory,SUBMISSION)
+        downloaders[SUBMISSION['postType']](directory, SUBMISSION)
 
     else:
         raise NoSuitablePost
 
     return None
+
 
 def download(submissions):
     """Analyze list of submissions and call the right function
@@ -570,10 +597,10 @@ def download(submissions):
     for i in range(subsLenght):
         print(f"\n({i+1}/{subsLenght}) – r/{submissions[i]['postSubreddit']}",
               end="")
-        print(f" – {submissions[i]['postType'].upper()}",end="",noPrint=True)
+        print(f" – {submissions[i]['postType'].upper()}", end="", noPrint=True)
 
         if isPostExists(submissions[i]):
-            print(f"\n" \
+            print(f"\n"
                   f"{submissions[i]['postSubmitter']}_"
                   f"{nameCorrector(submissions[i]['postTitle'])}")
             print("It already exists")
@@ -583,7 +610,7 @@ def download(submissions):
 
         try:
             downloadPost(submissions[i])
-        
+
         except FileAlreadyExistsError:
             print("It already exists")
             duplicates += 1
@@ -591,15 +618,16 @@ def download(submissions):
 
         except ImgurLoginError:
             print(
-                "Imgur login failed. \nQuitting the program "\
+                "Imgur login failed. \nQuitting the program "
                 "as unexpected errors might occur."
             )
             sys.exit()
 
         except ImgurLimitError as exception:
-            FAILED_FILE.add({int(i+1):[
+            FAILED_FILE.add({int(i + 1): [
                 "{class_name}: {info}".format(
-                    class_name=exception.__class__.__name__,info=str(exception)
+                    class_name=exception.__class__.__name__, info=str(
+                        exception)
                 ),
                 submissions[i]
             ]})
@@ -608,12 +636,14 @@ def download(submissions):
         except NotADownloadableLinkError as exception:
             print(
                 "{class_name}: {info}".format(
-                    class_name=exception.__class__.__name__,info=str(exception)
+                    class_name=exception.__class__.__name__, info=str(
+                        exception)
                 )
             )
-            FAILED_FILE.add({int(i+1):[
+            FAILED_FILE.add({int(i + 1): [
                 "{class_name}: {info}".format(
-                    class_name=exception.__class__.__name__,info=str(exception)
+                    class_name=exception.__class__.__name__, info=str(
+                        exception)
                 ),
                 submissions[i]
             ]})
@@ -622,38 +652,41 @@ def download(submissions):
         except NoSuitablePost:
             print("No match found, skipping...")
             downloadedCount -= 1
-        
+
         except Exception as exception:
             # raise exception
             print(
                 "{class_name}: {info}".format(
-                    class_name=exception.__class__.__name__,info=str(exception)
+                    class_name=exception.__class__.__name__, info=str(
+                        exception)
                 )
             )
-            FAILED_FILE.add({int(i+1):[
+            FAILED_FILE.add({int(i + 1): [
                 "{class_name}: {info}".format(
-                    class_name=exception.__class__.__name__,info=str(exception)
+                    class_name=exception.__class__.__name__, info=str(
+                        exception)
                 ),
                 submissions[i]
             ]})
             downloadedCount -= 1
 
     if duplicates:
-        print(f"\nThere {'were' if duplicates > 1 else 'was'} " \
+        print(f"\nThere {'were' if duplicates > 1 else 'was'} "
               f"{duplicates} duplicate{'s' if duplicates > 1 else ''}")
 
     if downloadedCount == 0:
         print("Nothing downloaded :(")
 
     else:
-        print(f"Total of {downloadedCount} " \
+        print(f"Total of {downloadedCount} "
               f"link{'s' if downloadedCount > 1 else ''} downloaded!")
+
 
 def main():
 
     VanillaPrint(
-        f"\nBulk Downloader for Reddit v{__version__}\n" \
-        f"Written by Ali PARLAKCI – parlakciali@gmail.com\n\n" \
+        f"\nBulk Downloader for Reddit v{__version__}\n"
+        f"Written by Ali PARLAKCI – parlakciali@gmail.com\n\n"
         f"https://github.com/aliparlakci/bulk-downloader-for-reddit/"
     )
     GLOBAL.arguments = parseArguments()
@@ -663,9 +696,15 @@ def main():
     else:
         GLOBAL.directory = Path(input("\ndownload directory: ").strip())
 
-    print("\n"," ".join(sys.argv),"\n",noPrint=True)
-    print(f"Bulk Downloader for Reddit v{__version__}\n",noPrint=True
-    )
+    print("\n", " ".join(sys.argv), "\n", noPrint=True)
+    print(f"Bulk Downloader for Reddit v{__version__}\n", noPrint=True
+          )
+
+    GLOBAL.conn = sqlite3.connect(GLOBAL.arguments.database)
+    c = GLOBAL.conn.cursor()
+    c.execute('''CREATE TABLE links
+             (link text, cat text, t1 text, t2 text)''')
+    GLOBAL.conn.commit()
 
     try:
         checkConflicts()
@@ -678,7 +717,7 @@ def main():
     if Path("config.json").exists():
         GLOBAL.configDirectory = Path("config.json")
     else:
-        GLOBAL.configDirectory = GLOBAL.defaultConfigDirectory  / "config.json"
+        GLOBAL.configDirectory = GLOBAL.defaultConfigDirectory / "config.json"
 
     GLOBAL.config = getConfig(GLOBAL.configDirectory)
 
@@ -692,7 +731,7 @@ def main():
     except Exception as exc:
         logging.error(sys.exc_info()[0].__name__,
                       exc_info=full_exc_info(sys.exc_info()))
-        print(log_stream.getvalue(),noPrint=True)
+        print(log_stream.getvalue(), noPrint=True)
         print(exc)
         sys.exit()
 
@@ -706,9 +745,10 @@ def main():
     else:
         download(POSTS)
 
+
 if __name__ == "__main__":
 
-    log_stream = StringIO()    
+    log_stream = StringIO()
     logging.basicConfig(stream=log_stream, level=logging.INFO)
 
     try:
@@ -720,7 +760,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         if GLOBAL.directory is None:
             GLOBAL.directory = Path(".\\")
-        
+
     except Exception as exception:
         if GLOBAL.directory is None:
             GLOBAL.directory = Path(".\\")
@@ -728,4 +768,5 @@ if __name__ == "__main__":
                       exc_info=full_exc_info(sys.exc_info()))
         print(log_stream.getvalue())
 
-    if not GLOBAL.arguments.quit: input("\nPress enter to quit\n")
+    if not GLOBAL.arguments.quit:
+        input("\nPress enter to quit\n")
