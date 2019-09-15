@@ -81,7 +81,7 @@ def getFile(fileDir, tempDir, imageURL, indent=0):
     cur = GLOBAL.conn.cursor()
     cur.execute("INSERT INTO links VALUES (?, ?, ?, ?)",
                 (slugifyPath, '-', '-', '-'))
-    conn.commit()
+    GLOBAL.conn.commit()
 
     opener = urllib.request.build_opener()
     if not "imgur" in imageURL:
