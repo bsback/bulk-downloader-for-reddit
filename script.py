@@ -494,9 +494,9 @@ def isPostExists(POST):
 
         SHORT_FILE_PATH = PATH / (POST['postId'] + extension)
 
-        slugifyPath1 = slugify(OLD_FILE_PATH)
-        slugifyPath2 = slugify(FILE_PATH)
-        slugifyPath3 = slugify(SHORT_FILE_PATH)
+        slugifyPath1 = slugify(str(OLD_FILE_PATH))
+        slugifyPath2 = slugify(str(FILE_PATH))
+        slugifyPath3 = slugify(str(SHORT_FILE_PATH))
 
         cur = GLOBAL.conn.cursor()
         cur.execute("select * from links where link=:link1 or link=:link2 or link=:link3",
